@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "teplomer",
+			"path": "../../teplomer"
+		},
+		{
+			"name": "Termostat",
+			"path": ".."
+		}
+	],
+	"settings": {}
+}
