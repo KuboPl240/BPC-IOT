@@ -14,15 +14,13 @@ int aLastState;
 bool setting = true; 
 bool heating = false; 
 
-#define OLED_RESET     21 // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+#define OLED_RESET     21 
+#define SCREEN_ADDRESS 0x3C 
 Adafruit_SSD1306 display(128, 64, &Wire, OLED_RESET);
 
-const char* ssid = "wifi_test";
-const char* password = "1203456789";
-
-const char* mqtt_server = "192.168.1.151";
-const char* mqtt_port = "1883";
+const char* mqtt_server = "147.229.148.105";
+int mqtt_port = 11883;
+String mqtt_topic = "IoTProject/4/";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -32,7 +30,7 @@ int value = 0;
 float temperature = 0;
 float target_temp = 20;
 
-const int ledPin = 2;
+const int reset = 2;
 
 void configMode(WiFiManager *myWiFiManager){
   display.setCursor(0,0);
@@ -44,17 +42,23 @@ void configMode(WiFiManager *myWiFiManager){
 }
 
 void setup_wifi() {
-    bool res;
+   bool res;
     WiFiManager wm;
-    wm.setAPCallback(configMode);
-    wm.resetSettings();
-    WiFiManagerParameter _mqtt_server("server", "mqtt server", mqtt_server, 40);
+    if(!digitalRead(reset))wm.resetSettings();
+    WiFiManagerParameter _mqtt_server("server", "mqtt server", "147.229.148.105", 40);
     wm.addParameter(&_mqtt_server);
-    WiFiManagerParameter _mqtt_port("port", "mqtt port", mqtt_port, 5);
+    char str[40];
+    WiFiManagerParameter _mqtt_port("port", "mqtt port", "11883", 6);
     wm.addParameter(&_mqtt_port);
-    mqtt_server = _mqtt_server.getValue();
-    mqtt_port = _mqtt_port.getValue();
+    WiFiManagerParameter _mqtt_topic("topic", "mqtt topic", "tlacitko", 40);
+    wm.addParameter(&_mqtt_topic);
     res = wm.autoConnect("Termostat"); 
+    strcpy(str, _mqtt_port.getValue());
+    mqtt_port = atoi(str);
+    strcpy(str,"IoTProject/4/");
+    mqtt_server =_mqtt_server.getValue();
+    strcat(str , _mqtt_topic.getValue());
+    mqtt_topic = str;
     delay(10);
     display.clearDisplay();
     display.setCursor(0,0);
@@ -73,7 +77,7 @@ void setup_wifi() {
       messageTemp += (char)message[i];
     }
     Serial.println();
-    if (String(topic) == "esp32/temperature") {
+    if (String(topic) == mqtt_topic.c_str()) {
       temperature = messageTemp.toFloat();
     }
   }
@@ -83,7 +87,7 @@ void setup_wifi() {
       if (client.connect("Termostat")) {
         display.println("MQTT server pripojeny");
         display.display();
-        client.subscribe("esp32/temperature");
+        client.subscribe(mqtt_topic.c_str());
         delay(2000);
       }else{
         display.println("Nepodarilo sa pripojit ku MQQT serveru");
@@ -99,6 +103,7 @@ void setup_wifi() {
     Serial.begin(115200);
     pinMode (outputA,INPUT);
     pinMode (outputB,INPUT); 
+    pinMode (reset,INPUT_PULLUP);
     if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
       Serial.println(F("SSD1306 allocation failed"));
       for(;;);
@@ -119,8 +124,7 @@ void setup_wifi() {
     else if (temperature>(target_temp+1))heating=0;
     long now = millis();
     mqttconnect();
-    aState = digitalRead(outputA); // Reads the "current" state of the outputA
-    // If the previous and the current state of the outputA are different, that means a Pulse has occured
+    aState = digitalRead(outputA); 
     if (aState != aLastState){     
       setting = true;
       if (digitalRead(outputB) != aState) { 
@@ -145,7 +149,7 @@ void setup_wifi() {
       }
     }
 
-    aLastState = aState; // Updates the previous state of the outputA with the current state
+    aLastState = aState; 
   
   client.loop();
   if ((now - lastMsg > 1000) && (setting==false)) {

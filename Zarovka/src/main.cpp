@@ -1,15 +1,7 @@
-
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include <WiFiManager.h>
-#define ONE_WIRE_BUS 4
 
-
-OneWire oneWire(ONE_WIRE_BUS);
-
-DallasTemperature sensors(&oneWire);
 
 const char* mqtt_server = "147.229.148.105";
 int mqtt_port = 11883;
@@ -19,12 +11,11 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 long lastMsg = 0;
 char msg[50];
-int value = 0;
 
-float temperature = 32;
-float humidity = 35;
+const int reset= 21;
+const int zarovka = 8;
+bool zarovkaState = false;
 
-const int reset = 8;
 
 void setup_wifi() {
   bool res;
@@ -44,24 +35,33 @@ void setup_wifi() {
   mqtt_server =_mqtt_server.getValue();
   strcat(str , _mqtt_topic.getValue());
   mqtt_topic = str;
-  Serial.println(str);
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 }
   
   void callback(char* topic, byte* message, unsigned int length) {
-    Serial.print("Message arrived on topic: ");
-    Serial.print(topic);
-    Serial.print(". Message: ");
+
+    String messageTemp;
+    
+    for (int i = 0; i < length; i++) {
+      messageTemp += (char)message[i];
+    }
+    Serial.println();
+    if (String(topic) == mqtt_topic.c_str()) {
+      if(messageTemp == "1"){
+        zarovkaState = !zarovkaState;
+        digitalWrite(zarovka, zarovkaState);
+      }
+    }
   }
   
   void reconnect() {
-    // Loop until we're reconnected
     while (!client.connected()) {
-      Serial.print("Attempting MQTT connection...");
-      if (client.connect("Teplomer")) {
+      Serial.println("Attempting MQTT connection...");
+      if (client.connect("Zarovka")) {
         Serial.println("connected");
+        client.subscribe(mqtt_topic.c_str());
       } else {
         Serial.print("failed");
         delay(5000);
@@ -70,11 +70,11 @@ void setup_wifi() {
   }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200); 
   setup_wifi();
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
-  sensors.begin();
+  pinMode(zarovka, OUTPUT);
   pinMode(reset, INPUT_PULLUP);
 }
 
@@ -84,19 +84,4 @@ void loop() {
     reconnect();
   }
   client.loop();
-
-  long now = millis();
-  if (now - lastMsg > 5000) {
-    lastMsg = now;
-    sensors.requestTemperatures(); 
-    temperature= sensors.getTempCByIndex(0); 
-    char tempString[8];
-    dtostrf(temperature, 1, 2, tempString);
-    Serial.print("Temperature: ");
-    Serial.println(tempString);
-    client.publish(mqtt_topic.c_str(), tempString);
-
-    
-  }
 }
- 
